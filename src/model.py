@@ -1,13 +1,46 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from config import N_EMBED , CONTEXT_SIZE , BATCH_SIZE
+from config import N_EMBED , CONTEXT_SIZE 
+
+class Head(nn.Module):
+    def __init__(self,head_size):
+        super().__init__()
+        self.key = nn.Linear(N_EMBED,head_size,bias=False)
+        self.query = nn.Linear(N_EMBED,head_size,bias=False)
+        self.value = nn.Linear(N_EMBED,head_size,bias=False)
+        self.register_buffer('tril',torch.tril(torch.ones(CONTEXT_SIZE,CONTEXT_SIZE)))
+    
+    def forward(self,x):
+        B,T,C = x.shape
+        k = self.key(x)
+        q = self.query(x)
+
+        wei = q@ k.transpose(-2,-1) * C **-0.5
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
+        wei = F.softmax(wei, dim=-1)
+
+        v = self.value(x)
+        
+        out = wei @ v
+
+        return out
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self,num_head,head_size):
+        super().__init__()
+        self.heads = nn.ModuleList([Head(head_size) for _ in range(num_head)])
+
+    def forward(self,x):
+        return torch.cat([h(x) for h in self.heads],dim=-1)
 
 class BiGramModel(nn.Module):
     def __init__(self,vocab_size):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size,N_EMBED)
         self.pos_embedding_table = nn.Embedding(CONTEXT_SIZE,N_EMBED)
+        # self.attn_head = Head(N_EMBED)
+        self.attn_head = MultiHeadAttention(4,N_EMBED//4)
         self.lm_head = nn.Linear(N_EMBED,vocab_size)
     
     def forward(self,idx,targets=None):
@@ -15,6 +48,7 @@ class BiGramModel(nn.Module):
         tok_embedings  = self.token_embedding_table(idx)
         pos_embedding = self.pos_embedding_table(torch.arange(T))
         x = tok_embedings+pos_embedding
+        x = self.attn_head(x)
         logits = self.lm_head(x)
         
         if targets == None:

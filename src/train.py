@@ -10,6 +10,8 @@ vocab_size = tokenizer.vocab_size
 split = int(0.9*len(tokens))
 train_data = tokens[:split]
 test_data = tokens[split:]
+max_iter = 5000
+eval_interval = 200
 
 def get_batches(mode):
     data = train_data if mode=="TRAIN" else test_data
@@ -18,6 +20,19 @@ def get_batches(mode):
     y = torch.stack([data[i+1:i+CONTEXT_SIZE+1]for i in ix])
     return x,y
 
+@torch.no_grad()
+def estimate_loss():
+    out = {}
+    model.eval()
+    for split in ['train', 'val']:
+        losses = torch.zeros(eval_interval)
+        for k in range(eval_interval):
+            X, Y = get_batches(split)
+            logits, loss = model(X, Y)
+            losses[k] = loss.item()
+        out[split] = losses.mean()
+    model.train()
+    return out
 
 '''Bi-GramModel
  has no context, prediction based completly on the previous charecter.
@@ -29,14 +44,15 @@ optim = torch.optim.AdamW(model.parameters(),lr=1e-3)
 print("Before Training \n")
 print(tokenizer.decode(model.generate(torch.zeros((1,1),dtype=torch.long),max_new_token=400)[0].tolist()))
 
-for steps in range(10000):
+for iter in range(max_iter):
+    if iter % eval_interval == 0 or iter == max_iter - 1:
+        losses = estimate_loss()
+        print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
     xb , yb = get_batches("TRAIN")
     logits , loss = model(xb,yb)
     optim.zero_grad(set_to_none=True)
     loss.backward()
     optim.step()
-    if(steps%100==0):
-        print(loss)
 
 print("After Training \n")
 print(tokenizer.decode(model.generate(torch.zeros((1,1),dtype=torch.long),max_new_token=400)[0].tolist()))
@@ -54,4 +70,3 @@ for b in range(BATCH_SIZE):
         x_bow[b,t] = torch.mean(x_prev,0)
 
 print(x_bow)
-
