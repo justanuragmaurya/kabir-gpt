@@ -1,6 +1,6 @@
 import torch
 from data_tokenize import DataTokenizer
-from config import CONTEXT_SIZE , BATCH_SIZE
+from config import CONTEXT_SIZE , BATCH_SIZE , N_EMBED
 from model import BiGramModel
 
 tokenizer = DataTokenizer("data.txt")
@@ -18,6 +18,10 @@ def get_batches(mode):
     y = torch.stack([data[i+1:i+CONTEXT_SIZE+1]for i in ix])
     return x,y
 
+
+'''Bi-GramModel
+ has no context, prediction based completly on the previous charecter.
+'''
 model = BiGramModel(vocab_size)
 optim = torch.optim.AdamW(model.parameters(),lr=1e-3)
 
@@ -36,3 +40,18 @@ for steps in range(10000):
 
 print("After Training \n")
 print(tokenizer.decode(model.generate(torch.zeros((1,1),dtype=torch.long),max_new_token=400)[0].tolist()))
+
+
+'''adding context to tokens by averaging
+
+'''
+x = torch.randn(BATCH_SIZE,CONTEXT_SIZE,N_EMBED)
+x_bow = torch.zeros(BATCH_SIZE,CONTEXT_SIZE,N_EMBED)
+
+for b in range(BATCH_SIZE):
+    for t in range(CONTEXT_SIZE):
+        x_prev = x[b,:t+1]
+        x_bow[b,t] = torch.mean(x_prev,0)
+
+print(x_bow)
+

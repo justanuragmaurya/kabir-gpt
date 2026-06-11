@@ -1,14 +1,20 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from config import N_EMBED , CONTEXT_SIZE
 
 class BiGramModel(nn.Module):
     def __init__(self,vocab_size):
         super().__init__()
-        self.token_embedding_table = nn.Embedding(vocab_size,vocab_size)
+        self.token_embedding_table = nn.Embedding(vocab_size,N_EMBED)
+        self.pos_embedding_table = nn.Embedding(block_size,N_EMBED)
+        self.lm_head = nn.Linear(N_EMBED,vocab_size)
     
     def forward(self,idx,targets=None):
-        logits = self.token_embedding_table(idx)
+        tok_embedings  = self.token_embedding_table(idx)
+        pos_embedding = self.pos_embedding_table(torch.arange(CONTEXT_SIZE))
+        x = tok_embedings+pos_embedding
+        logits = self.lm_head(x)
         
         if targets == None:
             loss = None
