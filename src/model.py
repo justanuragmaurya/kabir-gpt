@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from config import N_EMBED , CONTEXT_SIZE 
+from config import CONTEXT_SIZE, N_EMBED, N_HEAD, N_LAYER , DROPOUT
 
 class Head(nn.Module):
     def __init__(self,head_size):
@@ -10,6 +10,7 @@ class Head(nn.Module):
         self.query = nn.Linear(N_EMBED,head_size,bias=False)
         self.value = nn.Linear(N_EMBED,head_size,bias=False)
         self.register_buffer('tril',torch.tril(torch.ones(CONTEXT_SIZE,CONTEXT_SIZE)))
+        self.dropout = nn.Dropout(DROPOUT)
     
     def forward(self,x):
         B,T,C = x.shape
@@ -19,7 +20,7 @@ class Head(nn.Module):
         wei = q@ k.transpose(-2,-1) * C **-0.5
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
         wei = F.softmax(wei, dim=-1)
-
+        wei = self.dropout(wei)
         v = self.value(x)
         
         out = wei @ v
@@ -42,9 +43,10 @@ class FeedFwd(nn.Module):
     def __init__(self,n_embed):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(n_embed,n_embed),
+            nn.Linear(n_embed, 4 * n_embed),
             nn.ReLU(),
-            nn.Linear(n_embed,n_embed),
+            nn.Linear(4 * n_embed,n_embed),
+            nn.Dropout(DROPOUT)
         )
     
     def forward(self,x):
@@ -69,13 +71,8 @@ class BiGramModel(nn.Module):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size,N_EMBED)
         self.pos_embedding_table = nn.Embedding(CONTEXT_SIZE,N_EMBED)
-        # # self.attn_head = Head(N_EMBED)
-        # self.attn_head = MultiHeadAttention(4,N_EMBED//4)
-        # self.feed_fwd = FeedFwd(N_EMBED)
         self.blocks = nn.Sequential(
-            Block(N_EMBED,n_head=4),
-            Block(N_EMBED,n_head=4),
-            Block(N_EMBED,n_head=4),
+            *[Block(N_EMBED,n_head=N_HEAD) for _ in range(N_LAYER)],
             nn.LayerNorm(N_EMBED)
         )
         self.lm_head = nn.Linear(N_EMBED,vocab_size)
@@ -83,10 +80,8 @@ class BiGramModel(nn.Module):
     def forward(self,idx,targets=None):
         B,T = idx.shape
         tok_embedings  = self.token_embedding_table(idx)
-        pos_embedding = self.pos_embedding_table(torch.arange(T))
+        pos_embedding = self.pos_embedding_table(torch.arange(T, device=idx.device))
         x = tok_embedings+pos_embedding
-        # x = self.attn_head(x)
-        # x = self.feed_fwd(x)
         x = self.blocks(x)
         logits = self.lm_head(x)
         

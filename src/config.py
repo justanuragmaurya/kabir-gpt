@@ -1,4 +1,17 @@
+import torch
+
 CONTEXT_SIZE = 8
 BATCH_SIZE = 8
 N_EMBED = 32
+N_HEAD = 4
+N_LAYER = 3
 DROPOUT = 0.2
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+DATA_PATH = "data.txt"
+TRAIN_SPLIT = 0.9
+MAX_ITER = 5000
+EVAL_INTERVAL = 200
+EVAL_ITERS = 200
+LEARNING_RATE = 1e-3
+GENERATE_TOKENS = 400
